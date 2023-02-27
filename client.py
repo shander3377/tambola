@@ -3,12 +3,45 @@ from tkinter import *
 from PIL import ImageTk, Image
 from threading import Thread
 import random
+import platform 
 
 CLIENT = None
 IP_ADDRESS = "127.0.0.1"
 PORT = 6000
-ticketGrid = []
+
+canvas1 = None
+canvas2 = None
+
+nameEntry = None
+nameWindow = None
+gameWindow = None
+
+ticketGrid  = []
 currentNumberList = []
+markedNumberList = []
+flashNumberList = []
+flashNumberLabel = None
+gameOver = False
+def recvMsg():
+    print("hehehhehehehhe")
+    global CLIENT
+    global displayedNumberList
+    global flashNumberLabel
+    global canvas2
+    global gameOver
+    
+    numbers = [str(i) for i in range(1,91)]
+    
+    while True:
+        chunk = CLIENT.recv(2048).decode()
+        print(chunk)
+        if(chunk in numbers and flashNumberLabel and not gameOver):
+            flashNumberList.append(list(chunk))
+            print(chunk)
+            canvas2.itemconfigure(flashNumberLabel, text=chunk, font=("ChalkBoard SE", 60))
+        elif('wins the game' in chunk):
+            gameOver = True
+            canvas2.itemConfigure(flashNumberLabel, text=chunk, font=("ChalkBoard SE", 60))
 def setup():
     global CLIENT
     global IP_ADDRESS
@@ -16,9 +49,83 @@ def setup():
     
     CLIENT = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     CLIENT.connect((IP_ADDRESS, PORT))
+    thread = Thread(target=recvMsg)
+    thread.start()
     askPlayerName()
-    # thread = Thread(target=recieveMsg)
-    # thread.start()
+    
+
+def showWrongMarking():
+    global ticketGrid
+    global flashNumberList
+
+    # changing background color of number which is not flash yet on screen
+    for row in ticketGrid:
+        for numberBox in row:
+            if(numberBox['text']):
+                if(int(numberBox['text']) not in flashNumberList):
+                    if(platform.system() == 'Darwin'):
+                        # For Mac Users
+                        numberBox.configure(state='disabled', disabledbackground='#f48fb1',
+                            disabledforeground="white")
+                    else:
+                        # For Windows Users
+                        numberBox.configure(state='disabled', background='#f48fb1',
+                            foreground="white")
+
+#bp
+def markNumber(button):
+    global markedNumberList
+    global flashNumberList
+    global playerName
+    global CLIENT
+    global currentNumberList
+    global gameOver
+    global flashNumberLabel
+    global canvas2
+
+    buttonText = int(button['text'])
+    markedNumberList.append(buttonText)
+
+    # Make button disabled and changing color to green
+    if(platform.system() == 'Darwin'):
+        # For Mac Users
+        button.configure(state='disabled',disabledbackground='#c5e1a5', disabledforeground="black", highlightbackground="#c5e1a5")
+    else:
+        # For Windows Users
+        button.configure(state='disabled',background='#c5e1a5', foreground="black")
+
+
+
+
+    # NOTE: Example
+    # List1
+    # List1 = ['python' ,  'javascript', 'csharp', 'go', 'c', 'c++']
+
+    # List2
+    # List2 = ['csharp1' , 'go', 'python']
+
+    # print("The list {} contains all elements of the list {}".format(List1, List2))
+    # The list ['python', 'javascript', 'csharp', 'go', 'c', 'c++'] contains all elements of the list ['csharp', 'go', 'python']
+
+
+    winner =  all(item in flashNumberList for item in markedNumberList)
+
+    if(winner and sorted(currentNumberList) == sorted(markedNumberList)):
+        print(playerName)
+        message = playerName + ' wins the game.'
+        CLIENT.send(message.encode())
+        return
+
+    # When user lose the game
+    if(len(currentNumberList) == len(markedNumberList)):
+        winner =  all(item in flashNumberList for item in markedNumberList)
+        if(not winner):
+            gameOver = True
+            message = 'You Lose the Game'
+            canvas2.itemconfigure(flashNumberLabel, text = message, font = ('Chalkboard SE', 40))
+            showWrongMarking()
+
+
 def saveName():
     global CLIENT
     global playerName
@@ -72,6 +179,7 @@ def createTicket():
         rowList = []
         for col in range(0,9):
             boxButton = Button(gameWindow, font=("ChalkBoard SE", 30), width=1, height=1, borderwidth=5, relief="flat", bg="#fff176")
+            boxButton.configure(command = lambda boxButton=boxButton : markNumber(boxButton))
             boxButton.place(x=xpos, y=ypos)
             # print(boxButton.config())
             rowList.append(boxButton)
